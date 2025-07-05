@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>뽀모도로 타이머</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Warm Neutrals with Muted Accents -->
+    <!-- Application Structure Plan: The SPA is designed as a single-page, task-focused application. It features a central timer display showing the current mode (Work, Short Break, Long Break), the countdown time, and a completed Pomodoro session count. Below the display are clear control buttons (시작, 일시정지, 재설정) for intuitive user interaction. This minimalist structure prioritizes ease of use and direct control, allowing users to quickly grasp the timer's state and manage their focus periods without distractions. -->
+    <!-- Visualization & Content Choices: The core content is the timer countdown, presented as large, easily readable text (Goal: Inform; Presentation: Text; Interaction: None; Method: HTML/JS). The current mode and Pomodoro count are also text-based indicators (Goal: Inform; Presentation: Text; Interaction: None; Method: HTML/JS). Control is provided via interactive buttons (Goal: Engage/Control; Presentation: Buttons; Interaction: Click; Method: HTML/JS event listeners). For this specific Pomodoro timer, Chart.js and Plotly.js are not not used as no data visualization is required for the primary function of a simple timer. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f8f8; /* Light background */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px; /* Max width for charts */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height for charts */
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 text-gray-800">
+    <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-gray-200">
+        <h1 class="text-4xl font-bold mb-6 text-gray-900">이중연 전용<br>뽀모도로 타이머</h1>
+
+        <div class="mb-4">
+            <label for="work-time-input" class="block text-gray-700 text-sm font-bold mb-2">작업 시간 설정 (분):</label>
+            <input type="number" id="work-time-input" value="25" min="1" max="60" class="shadow appearance-none border rounded-xl w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 text-center">
+        </div>
+
+        <div class="mb-8">
+            <div id="mode-display" class="text-2xl font-semibold mb-2 text-blue-600">작업 시간</div>
+            <div id="timer-display" class="text-7xl font-extrabold text-gray-900 mb-4 tracking-tight">25:00</div>
+            <div id="pomodoro-count" class="text-lg text-gray-600">완료된 뽀모도로: 0</div>
+        </div>
+
+        <div class="flex justify-center space-x-4 mb-6">
+            <button id="start-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75">시작</button>
+            <button id="pause-button" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-75">일시정지</button>
+            <button id="reset-button" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75">재설정</button>
+        </div>
+
+        <audio id="alarm-sound" src="https://www.soundjay.com/buttons/beep-07.mp3" preload="auto"></audio>
+    </div>
+
+    <script>
+        const SHORT_BREAK_TIME = 5 * 60; // 5 minutes
+        const LONG_BREAK_TIME = 15 * 60; // 15 minutes
+        const POMODORO_SET = 4; // Long break after 4 pomodoros
+
+        let currentWorkTime = 25 * 60; // Initial work time
+        let currentMode = 'work'; // 'work', 'short-break', 'long-break'
+        let timeLeft = currentWorkTime;
+        let timerInterval = null;
+        let pomodoroCount = 0;
+        let isPaused = true;
+
+        const workTimeInput = document.getElementById('work-time-input');
+        const modeDisplay = document.getElementById('mode-display');
+        const timerDisplay = document.getElementById('timer-display');
+        const pomodoroCountDisplay = document.getElementById('pomodoro-count');
+        const startButton = document.getElementById('start-button');
+        const pauseButton = document.getElementById('pause-button');
+        const resetButton = document.getElementById('reset-button');
+        const alarmSound = document.getElementById('alarm-sound');
+
+        function updateDisplay() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timerDisplay.textContent = `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            pomodoroCountDisplay.textContent = `완료된 뽀모도로: ${pomodoroCount}`;
+        }
+
+        function playAlarm() {
+            alarmSound.play();
+        }
+
+        function switchMode() {
+            playAlarm();
+            if (currentMode === 'work') {
+                pomodoroCount++;
+                if (pomodoroCount % POMODORO_SET === 0) {
+                    currentMode = 'long-break';
+                    timeLeft = LONG_BREAK_TIME;
+                    modeDisplay.textContent = '긴 휴식 시간';
+                    modeDisplay.classList.remove('text-blue-600', 'text-purple-600');
+                    modeDisplay.classList.add('text-indigo-600');
+                } else {
+                    currentMode = 'short-break';
+                    timeLeft = SHORT_BREAK_TIME;
+                    modeDisplay.textContent = '짧은 휴식 시간';
+                    modeDisplay.classList.remove('text-blue-600', 'text-indigo-600');
+                    modeDisplay.classList.add('text-purple-600');
+                }
+            } else { // currentMode is 'short-break' or 'long-break'
+                currentMode = 'work';
+                timeLeft = currentWorkTime; // Use the user-defined work time
+                modeDisplay.textContent = '작업 시간';
+                modeDisplay.classList.remove('text-purple-600', 'text-indigo-600');
+                modeDisplay.classList.add('text-blue-600');
+            }
+            updateDisplay();
+            startTimer(); // Automatically start the next session
+        }
+
+        function startTimer() {
+            if (!timerInterval && isPaused) {
+                isPaused = false;
+                timerInterval = setInterval(() => {
+                    if (timeLeft > 0) {
+                        timeLeft--;
+                        updateDisplay();
+                    } else {
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                        switchMode();
+                    }
+                }, 1000);
+            }
+        }
+
+        function pauseTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            isPaused = true;
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            currentMode = 'work';
+            timeLeft = currentWorkTime; // Reset to the user-defined work time
+            pomodoroCount = 0;
+            isPaused = true;
+            modeDisplay.textContent = '작업 시간';
+            modeDisplay.classList.remove('text-purple-600', 'text-indigo-600');
+            modeDisplay.classList.add('text-blue-600');
+            updateDisplay();
+        }
+
+        // Event listener for work time input
+        workTimeInput.addEventListener('change', () => {
+            let newWorkMinutes = parseInt(workTimeInput.value);
+            if (isNaN(newWorkMinutes) || newWorkMinutes < 1) {
+                newWorkMinutes = 1; // Default to 1 minute if invalid
+                workTimeInput.value = 1;
+            } else if (newWorkMinutes > 60) {
+                newWorkMinutes = 60; // Cap at 60 minutes
+                workTimeInput.value = 60;
+            }
+            currentWorkTime = newWorkMinutes * 60;
+            if (currentMode === 'work' && isPaused) { // Only update if in work mode and paused
+                timeLeft = currentWorkTime;
+                updateDisplay();
+            } else if (currentMode === 'work' && !isPaused) {
+                // If timer is running, don't change current timeLeft, but new work sessions will use updated time
+            }
+            resetTimer(); // Reset to apply new work time immediately
+        });
+
+        startButton.addEventListener('click', startTimer);
+        pauseButton.addEventListener('click', pauseTimer);
+        resetButton.addEventListener('click', resetTimer);
+
+        // Initial display update
+        document.addEventListener('DOMContentLoaded', () => {
+            timeLeft = currentWorkTime; // Set initial timeLeft based on currentWorkTime
+            updateDisplay();
+        });
+    </script>
+</body>
+</html>

@@ -85,7 +85,13 @@
         }
 
         function playAlarm() {
+            // Play sound alarm
             alarmSound.play();
+
+            // Vibrate if supported (for mobile devices)
+            if (navigator.vibrate) {
+                navigator.vibrate([200, 100, 200]); // Vibrate for 200ms, pause 100ms, vibrate 200ms
+            }
         }
 
         function switchMode() {
